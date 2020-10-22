@@ -1,8 +1,16 @@
+from itertools import repeat
+from typing import List
+
 import numpy as np
 import torch
 import torch.nn as nn 
+from torch._six import container_abcs
 
 from GatedLinear import GatedLinear
+
+
+
+
 
 def seed(rand_seed):
     np.random.seed(rand_seed)
@@ -83,3 +91,14 @@ def train(make_model, make_optim, tasks, criterion, batch_size=32, test_hook=Non
         optim.step()
         
         losses[task_index].append(loss.item())
+
+
+
+def _ntuple(n):
+    def parse(x):
+        if isinstance(x, container_abcs.Iterable):
+            return x
+        return tuple(repeat(x, n))
+    return parse
+
+_pair = _ntuple(2)
