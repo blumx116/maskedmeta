@@ -1,15 +1,11 @@
 from itertools import repeat
-from typing import List
 
 import numpy as np
 import torch
-import torch.nn as nn 
+import torch.nn as nn
 from torch._six import container_abcs
 
 from GatedLinear import GatedLinear
-
-
-
 
 
 def seed(rand_seed):
@@ -17,6 +13,7 @@ def seed(rand_seed):
     torch.manual_seed(rand_seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
+
 
 def copy_weights(From: nn.Module, To: nn.Module) -> None:
     assert type(From) == type(To)
@@ -32,6 +29,7 @@ def copy_weights(From: nn.Module, To: nn.Module) -> None:
     else:
         To.load_state_dict(From.state_dict())
 
+
 # check that initial parameters are all different
 def forall(fn, params1, params2):
     return np.all(
@@ -40,20 +38,29 @@ def forall(fn, params1, params2):
             zip(params1, params2))))
 
 
-#-----------------------#
-#-- NEEDS TO BE FIXED --#
-#-----------------------#
+# ----------------------- #
+# -- NEEDS TO BE FIXED -- #
+# ----------------------- #
 def sample(x: torch.Tensor, y: torch.Tensor, batch_size: int):
     n_datapoints = x.shape[0]
-    assert n_datapoints == y.shape[0] # both should have the same number of samples
-    selected = np.random.choice(n_datapoints, size=batch_size) 
+    assert n_datapoints == y.shape[0] 
+    # both should have the same number of samples
+    selected = np.random.choice(n_datapoints, size=batch_size)
     # sample with replacement
     return x[selected, :], y[selected]
 
-#-----------------------#
-#-- NEEDS TO BE FIXED --#
-#-----------------------#
-def train(make_model, make_optim, tasks, criterion, batch_size=32, test_hook=None, n_epochs: int = 10000):
+
+# ----------------------- #
+# -- NEEDS TO BE FIXED -- #
+# ----------------------- #
+def train(
+        make_model,
+        make_optim,
+        tasks,
+        criterion,
+        batch_size=32,
+        test_hook=None,
+        n_epochs: int = 10000):
     """
         make_model: () -> nn.Module
         make_optim: (params) -> torch.optim
@@ -62,11 +69,11 @@ def train(make_model, make_optim, tasks, criterion, batch_size=32, test_hook=Non
         batch_size: int = 32
         test_hook: [nn.Module], int, int -> None
             runs tests on any or all of the modules
-            also given info about epoch number 
+            also given info about epoch number
         n_epochs: int > 0
-        
-        returns: 
-            trained_models: [nn.Module] 
+
+        returns:
+            trained_models: [nn.Module]
             losses: [float]
     """
     n_tasks = len(tasks)
@@ -76,22 +83,21 @@ def train(make_model, make_optim, tasks, criterion, batch_size=32, test_hook=Non
         # share the weights of the first model among all models
     optims = [make_optim(model.parameters()) for model in models]
     losses = [[] for _ in models]
-    
+
     for _ in n_epochs:
         task_index = np.random.randint(high=n_tasks)
         x, y = sample(*tasks[task_index], batch_size)
         optim = optims[task_index]
         model = models[task_index]
-        
+
         y_hat = model(x)
         loss = criterion(y_hat, y)
-        
+
         optim.zero_grad()
         loss.backward()
         optim.step()
-        
-        losses[task_index].append(loss.item())
 
+        losses[task_index].append(loss.item())
 
 
 def _ntuple(n):
@@ -100,5 +106,6 @@ def _ntuple(n):
             return x
         return tuple(repeat(x, n))
     return parse
+
 
 _pair = _ntuple(2)

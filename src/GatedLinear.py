@@ -1,9 +1,10 @@
 import math
 from typing import Tuple
 
-import torch 
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
 
 class GatedLinear(nn.Module):
     def __init__(self, in_features: int, out_features: int, bias: bool = True):
@@ -16,7 +17,8 @@ class GatedLinear(nn.Module):
         # Use Kaiming initialization for weights
         # https://arxiv.org/abs/1502.01852
         # multiply by 2 to account for masks
-        self.WW, self.bW = GatedLinear.kaiming_initialize((out_features, in_features), bias)
+        self.WW, self.bW = GatedLinear.kaiming_initialize(
+            (out_features, in_features), bias)
         # self.WW : torch.Tensor[float32], (out_features, in_features)
         # self.bW : torch.Tensor[float32], (out_features)
         with torch.no_grad():
@@ -24,7 +26,8 @@ class GatedLinear(nn.Module):
             if self.bias:
                 self.bW *= 2
         
-        self.WM, self.bM = GatedLinear.constant_initialize((out_features, in_features), bias, constant=0)
+        self.WM, self.bM = GatedLinear.constant_initialize(
+            (out_features, in_features), bias, constant=0)
         # self.WW : torch.Tensor[float32], (in_features, out_features)
         # self.bW : torch.Tensor[float32], (out_features)
         
@@ -39,7 +42,9 @@ class GatedLinear(nn.Module):
         return torch.sigmoid(M) * W
     
     @staticmethod
-    def kaiming_initialize(shape: Tuple[int, int], bias: bool) -> Tuple[torch.Tensor, torch.Tensor]:
+    def kaiming_initialize(
+            shape: Tuple[int, int],
+            bias: bool) -> Tuple[torch.Tensor, torch.Tensor]:
         # basically copied from here:
         # https://pytorch.org/docs/stable/_modules/torch/nn/modules/linear.html#Linear
         W = nn.Parameter(torch.Tensor(*shape))
@@ -52,9 +57,12 @@ class GatedLinear(nn.Module):
         else:
             b = None
         return W, b
-    
+
     @staticmethod
-    def constant_initialize(shape: Tuple[int, int], bias: bool, constant: float) -> Tuple[torch.Tensor, torch.Tensor]:
+    def constant_initialize(
+            shape: Tuple[int, int],
+            bias: bool,
+            constant: float) -> Tuple[torch.Tensor, torch.Tensor]:
         W = nn.Parameter(torch.Tensor(*shape))
         nn.init.constant_(W, constant)
         if bias:
@@ -63,7 +71,7 @@ class GatedLinear(nn.Module):
         else:
             b = None
         return W, b
-    
+
     def copy_weights(self, other: "GatedLinear") -> None:
         assert self.in_features == other.in_features
         assert self.out_features == other.out_features
