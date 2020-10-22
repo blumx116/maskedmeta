@@ -11,7 +11,7 @@ from torch import Tensor
 
 from utils import _pair
 
-class GatedConv(_ConvNd):
+class GatedConv2d(_ConvNd):
     def __init__(
         self,
         in_channels: int,
@@ -28,11 +28,14 @@ class GatedConv(_ConvNd):
         stride = _pair(stride)
         padding = _pair(padding)
         dilation = _pair(dilation)
-        super(GatedConv, self).__init__(
+        super(GatedConv2d, self).__init__(
             in_channels, out_channels, kernel_size, stride, padding, dilation,
             False, _pair(0), groups, bias, padding_mode)    #note: _ConvNd should initialize self.weight and self.bias
 
-        self.weightMask, self.biasMask = GatedConv.constant_initialize((out_channels, in_channels), self.bias, constant=0)
+        self.weightMask, self.biasMask = GatedConv2d.constant_initialize((out_channels, in_channels), self.bias, constant=0)
+        self.weight *= 2
+        if self.bias:
+            self.bias *= 2
     
     @staticmethod
     def gated(W: torch.Tensor, M: torch.Tensor) -> torch.Tensor:
@@ -54,7 +57,7 @@ class GatedConv(_ConvNd):
     #taken from nn.Conv2d
     def _conv_forward(self, input, weight):
         #add masking to bias
-        maskedBias = GatedConv.gated(self.bias, self.biasMask) if self.bias else None
+        maskedBias = GatedConv2d.gated(self.bias, self.biasMask) if self.bias else None
 
         if self.padding_mode != 'zeros':
             return F.conv2d(F.pad(input, self._reversed_padding_repeated_twice, mode=self.padding_mode),
@@ -66,13 +69,14 @@ class GatedConv(_ConvNd):
     #taken from nn.Conv2d
     def forward(self, input: Tensor) -> Tensor:
         #add masking to weight
-        maskedWeight = GatedConv.gated(self.weight, self.weightMask)
+        maskedWeight = GatedConv2d.gated(self.weight, self.weightMask)
         return self._conv_forward(input, maskedWeight)
 
     #TODO: is this func necessary, and if so are we doing the right checks?
     def copy_weights(self, other: "GatedConv") -> None:
         assert self.in_channels == other.in_channels
         assert self.out_channels == other.out_channels
+        assert self.kernel_size == other.kernel_size
         assert self.bias == other.bias
         self.weight = other.weight
         self.bias = other.bias
