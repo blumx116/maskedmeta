@@ -27,13 +27,15 @@ class GatedConv2d(_ConvNd):
         stride = _pair(stride)
         padding = _pair(padding)
         dilation = _pair(dilation)
+        
+        self.weightMask, self.biasMask = GatedConv2d.constant_initialize(
+            (out_channels, in_channels), bias, constant=0)
+        
         super(GatedConv2d, self).__init__(
             in_channels, out_channels, kernel_size, stride, padding, dilation,
             False, _pair(0), groups, bias, padding_mode)    
         # note: _ConvNd should initialize self.weight and self.bias
 
-        self.weightMask, self.biasMask = GatedConv2d.constant_initialize(
-            (out_channels, in_channels), self.bias, constant=0)
         self.weight *= 2
         if self.bias:
             self.bias *= 2
