@@ -26,6 +26,8 @@ def copy_weights(From: nn.Module, To: nn.Module) -> None:
         assert From.bias == To.bias
         To.WW = From.WW
         To.bW = From.bW
+    elif isinstance(From, GatedConv2d):
+        raise Exception("Ashley you haven't added GatedConv2d to copy_weights")
     else:
         To.load_state_dict(From.state_dict())
 
