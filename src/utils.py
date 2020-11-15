@@ -82,9 +82,9 @@ def train(
             losses: [float]
     """
     n_tasks = len(tasks)
-    models = [make_model() for _ in n_tasks]
+    models = [make_model() for _ in range(n_tasks)]
     for model in models[1:]:
-        copy_weights(From=model[0], To=model)
+        copy_weights(From=models[0], To=model)
         # share the weights of the first model among all models
     optims = [make_optim(model.parameters()) for model in models]
     losses = [[] for _ in models]
