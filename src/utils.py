@@ -86,11 +86,18 @@ def train(
     optims = [make_optim(model.parameters()) for model in models]
     losses = [[] for _ in models]
 
-    for _ in n_epochs:
-        task_index = np.random.randint(high=n_tasks)
+    prev_model = None
+
+    for _ in tqdm(range(n_epochs), "Training"):
+
+        task_index = np.random.randint(0, high=n_tasks)
         x, y = sample(*tasks[task_index], batch_size)
         optim = optims[task_index]
         model = models[task_index]
+
+        if prev_model is not None:
+            copy_weights(From=prev_model, To=model)
+        prev_model = model
 
         y_hat = model(x)
         loss = criterion(y_hat, y)
