@@ -111,6 +111,8 @@ def train(
 
         losses[task_index].append(loss.item())
 
+    return models, optims, losses
+
 
 def _ntuple(n):
     def parse(x):
