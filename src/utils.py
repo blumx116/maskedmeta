@@ -5,7 +5,10 @@ import torch
 import torch.nn as nn
 from torch._six import container_abcs
 
-from GatedLinear import GatedLinear
+from tqdm.notebook import tqdm
+
+from src.GatedLinear import GatedLinear
+from src.GatedConv2d import GatedConv2d
 
 
 def seed(rand_seed):
