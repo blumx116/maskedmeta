@@ -17,6 +17,10 @@ class SeparateModels(nn.Module, MetaModel):
 
         self.add_tasks(n_tasks)
 
+    def forward(self,
+            inputs: torch.Tensor) -> torch.Tensor:
+        return self.models[self.cur_task_idx].forward(inputs)
+
     def set_task(self,
             task_idx: int) -> None:
         assert 0 <= task_idx < self.n_tasks
