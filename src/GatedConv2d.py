@@ -7,7 +7,7 @@ from torch.nn.common_types import _size_2_t
 from torch.nn.modules.conv import _ConvNd
 from torch import Tensor
 
-from utils import _pair
+from .utils import _pair
 
 
 class GatedConv2d(_ConvNd):
