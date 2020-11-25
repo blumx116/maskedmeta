@@ -5,7 +5,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class GatedLinear(nn.Module):
+from .MetaModel import MetaModel
+
+
+class GatedLinear(nn.Module, MetaModel):
     def __init__(self,
             in_features: int,
             out_features: int,
@@ -40,6 +43,23 @@ class GatedLinear(nn.Module):
                 self.bMs.append(self._make_bM_(self.in_features, self.out_features))
 
         self.n_tasks += n_tasks
+
+    def shared_parameters(self) -> nn.ParameterList:
+        result: nn.ParameterList = nn.ParameterList()
+        result.append(self.WW)
+        if self.bias:
+            result.append(self.bW)
+        return result
+
+    def task_parameters_for(self,
+            task_idx: int) -> nn.ParameterList:
+        assert task_idx < self.n_tasks
+        result: nn.ParameterList = nn.ParameterList()
+        result.append(self.WMs[task_idx])
+        if self.bias:
+            result.append(self.bMs[task_idx])
+        return result
+
 
     def forward(self,
             inputs: torch.Tensor) -> torch.Tensor:
