@@ -26,8 +26,8 @@ class GatedLinear(nn.Module, MetaModel):
         self.n_tasks: int = 0
         self.cur_task_idx: Optional[int] = None
 
-        self.WW: torch.Tensor = self._make_WW_(in_features, out_features)
-        self.bW: Optional[torch.Tensor] = self._make_bW_(in_features, out_features) if self.bias else None
+        self.WW: nn.Parameter = self._make_WW_(in_features, out_features)
+        self.bW: Optional[nn.Parameter] = self._make_bW_(in_features, out_features) if self.bias else None
 
         self.WMs: nn.ParameterList = nn.ParameterList()
         self.bMs: Optional[nn.ParameterList] = nn.ParameterList() if self.bias else None
@@ -96,18 +96,18 @@ class GatedLinear(nn.Module, MetaModel):
     def _make_WW_(self,
             in_features: int,
             out_features: int) -> nn.Parameter:
-        W: nn.Parameter = nn.Parameter(torch.Tensor(out_features, in_features))
+        W: torch.Tensor = torch.Tensor(out_features, in_features)
         nn.init.kaiming_uniform_(W, a=math.sqrt(5))
-        return W * 2.
+        return nn.Parameter(W * 2.)
 
     def _make_bW_(self,
                   in_features: int,
                   out_features: int) -> torch.Tensor:
-        b: nn.Parameter = nn.Parameter(torch.Tensor(out_features))
+        b: torch.Tensor = torch.Tensor(out_features)
         fan_in: float = float(in_features)
         bound = 1 / math.sqrt(fan_in)
         nn.init.uniform_(b, -bound, bound)
-        return b * 2.
+        return nn.Parameter(b * 2.)
 
     def _make_WM_(self,
             in_features: int,

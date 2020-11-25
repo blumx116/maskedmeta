@@ -9,7 +9,6 @@ import torch.nn as nn
 
 
 from src.utils import seed, forall
-from src.gated_utils import copy_weights
 from src.GatedLinearNew import GatedLinear
 
 def save_W_params(model: GatedLinear) -> List[nn.Parameter]:
@@ -66,4 +65,3 @@ def test_gated_linear_initialization2():
         glin.set_task(task)
         assert torch.all(torch.eq(glin(randvec), lin(randvec))), \
             "At initialization, GatedLinear() should always return same result as nn.Linear"
-
