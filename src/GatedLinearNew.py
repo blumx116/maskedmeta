@@ -70,6 +70,9 @@ class GatedLinear(nn.Module):
         assert 0 <= task_idx < self.n_tasks
         self.cur_task_idx = task_idx
 
+    def get_task(self) -> int:
+        return self.cur_task_idx
+
     def _make_WW_(self,
             in_features: int,
             out_features: int) -> nn.Parameter:
