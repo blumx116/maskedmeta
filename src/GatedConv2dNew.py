@@ -11,7 +11,7 @@ from torch import Tensor
 from .utils import _single, _pair, _triple, _reverse_repeat_tuple
 from .MetaModel import MetaModel
 
-#Code primarily taken from nn._onvNd
+#Code primarily taken from nn._convNd
 class GatedConvNd(nn.Module):
     __constants__ = ['stride', 'padding', 'dilation', 'groups',
                      'padding_mode', 'output_padding', 'in_channels',
