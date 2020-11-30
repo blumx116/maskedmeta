@@ -6,13 +6,12 @@ import torch.nn as nn
 from torch.nn.parameter import Parameter
 import torch.nn.functional as F
 from torch.nn.common_types import _size_1_t, _size_2_t, _size_3_t
-#from torch.nn.modules.conv import _ConvNd
 from torch import Tensor
 
 from .utils import _single, _pair, _triple, _reverse_repeat_tuple
 from .MetaModel import MetaModel
 
-
+#Code primarily taken from nn._onvNd
 class GatedConvNd(nn.Module):
     __constants__ = ['stride', 'padding', 'dilation', 'groups',
                      'padding_mode', 'output_padding', 'in_channels',
@@ -209,24 +208,6 @@ class GatedConv2d(GatedConvNd, MetaModel):
 
     def get_task(self) -> int:
         return self.cur_task_idx
-
-    '''def _make_WW_(self,
-                  in_channels: int,
-                  out_channels: int,
-                  kernel_size: _size_2_t,
-                  groups: int) -> nn.Parameter:
-        W: torch.Tensor = torch.Tensor(out_channels, in_channels // groups, *kernel_size)
-        nn.init.kaiming_uniform_(W, a=math.sqrt(5))
-        return nn.Parameter(W * 2.)
-
-    def _make_bW_(self,
-                  in_channels: int,
-                  out_channels: int) -> torch.Tensor:
-        b: torch.Tensor = torch.Tensor(out_channels)
-        fan_in: float = float(in_channels)
-        bound = 1 / math.sqrt(fan_in)
-        nn.init.uniform_(b, -bound, bound)
-        return nn.Parameter(b * 2.)'''
 
     def _make_WM_(self,
                   in_channels: int,
