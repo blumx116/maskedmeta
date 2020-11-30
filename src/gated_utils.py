@@ -1,5 +1,5 @@
-from itertools import islice
-from typing import Callable, List, Tuple, Union, NamedTuple
+from itertools import islice, chain
+from typing import Callable, List, Tuple, Union, NamedTuple, Iterable
 
 import numpy as np
 import torch
@@ -71,15 +71,15 @@ def get_task_parameters(
 
 class TrainResult(NamedTuple):
     model: Union[MetaModel, nn.Module]
-    shared_optim: Optimizer
-    task_optims: List[Optimizer]
+    optim: Optimizer
     losses: List[List[float]]
+    grads: List[torch.Tensor]
+    weights: List[torch.Tensor]
 
 
 def train(
-        make_model: Callable[[int], Union[MetaModel, nn.Module]],
-        make_shared_optim: Callable[[nn.ParameterList], Optimizer],
-        make_task_optim: Callable[[nn.ParameterList, int], Optimizer],
+        make_model: Callable[[int], nn.Module], # (n_tasks) => model
+        make_optim: Callable[[Iterable[nn.Parameter], Iterable[nn.Parameter]], Optimizer], # (weight params, mask params) => optimizer
         tasks: List[Tuple[torch.Tensor, torch.Tensor]],
         criterion: nn.Module,
         batch_size: int=32,
@@ -88,17 +88,20 @@ def train(
     assert len(tasks) > 0
 
     n_tasks: int = len(tasks)
-    model: Union[MetaModel, nn.Module] = make_model(n_tasks)
-    shared_optim: Optimizer = make_shared_optim(get_shared_parameters(model))
-    task_optims: List[Optimizer] = [make_task_optim(get_task_parameters(model, idx), idx) for idx in range(n_tasks)]
-
+    model: nn.Module = make_model(n_tasks)
+    task_params_l: List[nn.ParameterList] = [get_task_parameters(model, idx) for idx in range(n_tasks)]
+    task_params: nn.ParameterList = nn.ParameterList(chain(*task_params_l))
+    optim: Optimizer = make_optim(get_shared_parameters(model), task_params)
+    grads = []
+    weights = []
     losses: List[List[float]] = [[] for _ in range(n_tasks)]
 
     for _ in tqdm(range(n_epochs)):
+        optim.zero_grad()
         task_idx: int = np.random.randint(0, n_tasks)
+        # task_idx: int = 1
 
-        cur_task_optim: Optimizer = task_optims[task_idx]
-        model.set_task(task_idx)
+        set_task(model, task_idx)
 
         x: torch.Tensor
         y: torch.Tensor
@@ -107,16 +110,17 @@ def train(
         yhat: torch.Tensor = model(x)
         loss: torch.Tensor = criterion(yhat, y)
 
-        shared_optim.zero_grad()
-        cur_task_optim.zero_grad()
         loss.backward()
-        shared_optim.step()
-        cur_task_optim.step()
+        optim.step()
 
-        losses[task_idx].append(loss.detach().cpu().item())
+        #DEBUG
+        #grads.append(model.weight.grad.detach().cpu().clone())
+        # weights.append(model.weight.detach().cpu().clone())
+        losses[task_idx].append(loss.item())
 
     return TrainResult(
         model=model,
-        shared_optim=shared_optim,
-        task_optims=task_optims,
-        losses=losses)
+        optim=optim,
+        losses=losses,
+        grads=grads,
+        weights=weights)

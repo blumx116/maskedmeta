@@ -98,10 +98,11 @@ def test_get_task_parameters():
 
 def test_train_linear():
     seed(0)
-    n_tasks: int = 3
-    input_dim: int = 3
+    n_tasks: int = 2
+    input_dim: int = 2
     output_dim: int = 1
-    weights: torch.Tensor = torch.normal(0, 1, size=(input_dim,))
+    # weights: torch.Tensor = torch.normal(0, 1, size=(input_dim,))
+    weights = torch.Tensor([2, 3])
     ws: List[torch.Tensor] = []
     for i in range(n_tasks):
         w = weights.detach().clone()
@@ -114,18 +115,49 @@ def test_train_linear():
         ys.append(xs @ ws[i])
 
     tasks: List[Tuple[torch.Tensor, torch.Tensor]] = [(xs, ys[i]) for i in range(n_tasks)]
-    make_optim: Callable[[Iterable[nn.Parameter]], Optimizer] = \
-        lambda params, idx=None: torch.optim.Adam(params, lr=3e-2)
-    make_model: Callable[[int], GatedLinear] = lambda n: GatedLinear(input_dim, output_dim, bias=True, n_tasks=n)
+    make_optim: Callable[[Iterable[nn.Parameter], Iterable[nn.Parameter]], Optimizer] = \
+        lambda shared, task_weights: torch.optim.Adam(
+            [{'params': shared, 'lr': 3e-2},
+             {'params': task_weights, 'lr': 6e-1}])
+    make_model: Callable[[int], GatedLinear] = lambda n: GatedLinear(input_dim, output_dim, bias=False, n_tasks=2)
 
     results: TrainResult = train(
         make_model,
-        make_shared_optim=make_optim,
-        make_task_optim=make_optim,
+        make_optim=make_optim,
         tasks=tasks,
         criterion=nn.MSELoss(),
-        batch_size=32,
+        batch_size=1,
         n_epochs=10000)
+    import sys
+    if isinstance(results.model, nn.Linear):
+        print("learned weights: ", results.model.weight, file=sys.stderr)
+    else:
+        print("learned weights: ", [(torch.sigmoid(results.model.WMs[i]) * results.model.WW) for i in range(n_tasks)], file=sys.stderr)
+        print("learned masks: ", [torch.sigmoid(results.model.WMs[i]) for i in range(n_tasks)], file=sys.stderr)
+    print("correct weights: ", [ws], file=sys.stderr)
+    import matplotlib.pyplot as plt
+    from src.plotting import exponential_average
+    for i in range(n_tasks):
+        if len(results.losses[i]) > 0:
+            plt.plot(exponential_average(results.losses[i], gamma=0.95))
+    plt.title("plot of losses")
+    plt.show()
+
+    # task 1 : y = ax_1
+    # task 2 : y = bx_2
+    # ideal WW : [a, b]
+    # idea WM[0] = [-++
+    plt.title("plot of gradients")
+    grads: torch.Tensor = torch.stack(list(map(lambda g: g[0], results.grads)), dim=0)
+    for i in range(grads.shape[1]):
+        plt.plot(exponential_average(grads[:, i].numpy(), gamma=0.95))
+    plt.show()
+
+    plt.title("plot of weights")
+    grads: torch.Tensor = torch.stack(list(map(lambda g: g[0], results.weights)), dim=0)
+    for i in range(grads.shape[1]):
+        plt.plot(exponential_average(grads[:, i].numpy(), gamma=0.95))
+    plt.show()
 
     xs: torch.Tensor = torch.normal(1, 2, size=(300, 3))
 
