@@ -10,6 +10,7 @@ class SeparateModels(nn.Module, MetaModel):
     def __init__(self,
             make_model: Callable[[], nn.Module],
             n_tasks: int = 1):
+        super().__init__()
         self._make_model_: Callable[[], nn.Module] = make_model
         self.models: nn.ModuleList = nn.ModuleList()
         self.n_tasks: int = 0
@@ -25,7 +26,7 @@ class SeparateModels(nn.Module, MetaModel):
             task_idx: int) -> None:
         assert 0 <= task_idx < self.n_tasks
 
-        self.cur_task_idx = None
+        self.cur_task_idx = task_idx
 
     def get_task(self) -> Optional[int]:
         return self.cur_task_idx
