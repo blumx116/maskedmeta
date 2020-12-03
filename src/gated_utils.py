@@ -1,5 +1,5 @@
 from itertools import islice, chain
-from typing import Callable, List, Tuple, Union, NamedTuple, Iterable
+from typing import Callable, List, Tuple, Union, NamedTuple, Iterable, Optional, Dict
 
 import numpy as np
 import torch
@@ -83,7 +83,7 @@ def train(
         tasks: List[Tuple[torch.Tensor, torch.Tensor]],
         criterion: nn.Module,
         batch_size: int=32,
-        test_hook=None,
+        test_hook: Optional[List[Tuple[int, Callable[[nn.Module, int], None]]]] = None,
         n_epochs: int = 10000) -> TrainResult:
     assert len(tasks) > 0
 
@@ -96,7 +96,7 @@ def train(
     weights = []
     losses: List[List[float]] = [[] for _ in range(n_tasks)]
 
-    for _ in tqdm(range(n_epochs)):
+    for t in tqdm(range(n_epochs)):
         optim.zero_grad()
         task_idx: int = np.random.randint(0, n_tasks)
         # task_idx: int = 1
@@ -113,10 +113,15 @@ def train(
         loss.backward()
         optim.step()
 
-        #DEBUG
-        #grads.append(model.weight.grad.detach().cpu().clone())
-        # weights.append(model.weight.detach().cpu().clone())
         losses[task_idx].append(loss.item())
+
+        if test_hook is not None:
+            frequency: int
+            fn: Callable[[nn.Module, int], None]
+            for frequency, fn in test_hook:
+                if t % frequency == 0:
+                    fn(model, t)
+
 
     return TrainResult(
         model=model,
