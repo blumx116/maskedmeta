@@ -14,8 +14,6 @@ def seed(rand_seed):
     torch.backends.cudnn.benchmark = False
 
 
-
-
 # check that initial parameters are all different
 def forall(fn, params1, params2):
     return np.all(

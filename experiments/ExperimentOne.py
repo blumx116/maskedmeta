@@ -168,7 +168,7 @@ def run_experiment(
         tasks=task_train_data,
         criterion=nn.MSELoss(),
         batch_size=batch_size,
-        test_hook=[(10, test_fn)] + additional_test_hooks,
+        test_hooks=[(10, test_fn)] + additional_test_hooks,
         n_epochs=n_epochs)
 
     writer.add_hparams(hparam_dict={

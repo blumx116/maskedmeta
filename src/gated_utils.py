@@ -83,7 +83,7 @@ def train(
         tasks: List[Tuple[torch.Tensor, torch.Tensor]],
         criterion: nn.Module,
         batch_size: int=32,
-        test_hook: Optional[List[Tuple[int, Callable[[nn.Module, int], None]]]] = None,
+        test_hooks: Optional[List[Tuple[int, Callable[[nn.Module, int], None]]]] = None,
         n_epochs: int = 10000) -> TrainResult:
     assert len(tasks) > 0
 
@@ -115,10 +115,10 @@ def train(
 
         losses[task_idx].append(loss.item())
 
-        if test_hook is not None:
+        if test_hooks is not None:
             frequency: int
             fn: Callable[[nn.Module, int], None]
-            for frequency, fn in test_hook:
+            for frequency, fn in test_hooks:
                 if t % frequency == 0:
                     fn(model, t)
 
