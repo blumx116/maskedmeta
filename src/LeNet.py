@@ -2,7 +2,7 @@ import torch.nn as nn
 from collections import OrderedDict
 
 from .GatedLinear import GatedLinear
-from .GatedConv2d import GatedConv2d
+from .GatedConv2dNew import GatedConv2d
 
 
 class C1(nn.Module):

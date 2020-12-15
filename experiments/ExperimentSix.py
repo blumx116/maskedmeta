@@ -90,7 +90,12 @@ def run_experiment(
     #tasks: List[ExperimentSixTask] = [generator.create_task() for _ in range(n_tasks)]
 
     train_mnist = datasets.MNIST('~/datasets/mnist', transform=transforms.ToTensor(), train=True, download=True)
+    train_x: torch.Tensor = torch.stack([x for x, y in train_mnist], dim=0)
+    train_y: torch.Tensor = torch.stack([torch.from_numpy(np.asarray(y)) for x, y in train_mnist], dim=0)
     test_mnist = datasets.MNIST('~/datasets/mnist', transform=transforms.ToTensor(), train=False, download=True)
+    test_x: torch.Tensor = torch.stack([x for x, y in test_mnist], dim=0)
+    test_y: torch.Tensor = torch.stack([torch.from_numpy(np.asarray(y)) for x, y in test_mnist], dim=0)
+    task_test_data: List[Tuple[torch.Tensor, torch.Tensor]] = [(test_x, test_y)]
 
     def test_fn(model: nn.Module, epoch: int):
         task_idx: int
@@ -120,7 +125,7 @@ def run_experiment(
         make_optim=lambda shared_params, task_params: Adam([
             {'params': shared_params, 'lr': learning_rate},
             {'params': task_params, 'lr': learning_rate * task_speedup}]),
-        tasks=[train_mnist],
+        tasks=[(train_x, train_y)],
         criterion=nn.CrossEntropyLoss(),
         test_hooks=[(10, test_fn)] + additional_test_hooks,
         n_epochs=n_epochs)
