@@ -10,6 +10,8 @@ from tqdm.autonotebook import tqdm
 from .MetaModel import MetaModel
 from .utils import sample
 
+from src.LeNet import LeNet5
+
 """
 def copy_weights(From: nn.Module, To: nn.Module) -> None:
     assert type(From) == type(To)
@@ -36,6 +38,8 @@ def set_task(
             set_task(submodule, task_idx)
     elif isinstance(module, MetaModel):
         module.set_task(task_idx)
+    elif isinstance(module, LeNet5):
+        module.set_task(task_idx)
     else:
         pass
 
@@ -48,6 +52,8 @@ def get_shared_parameters(
             # skip the first element of module.modules(), because it's recursively the nn.Sequential
             result.extend(get_shared_parameters(submodule))
     elif isinstance(module, MetaModel):
+        return module.shared_parameters()
+    elif (isinstance(module, LeNet5) and module.isGated()):
         return module.shared_parameters()
     else:
         result.extend(module.parameters())
@@ -65,6 +71,8 @@ def get_task_parameters(
             result.extend(get_task_parameters(submodule, task_idx))
     elif isinstance(module, MetaModel):
         result.extend(module.task_parameters_for(task_idx))
+    elif (isinstance(module, LeNet5) and module.isGated()):
+        result.extend(module.task_parameters_for(task_idx))
     # nothing to do for other module types, give empty list
     return result
 
@@ -75,6 +83,7 @@ class TrainResult(NamedTuple):
     losses: List[List[float]]
     grads: List[torch.Tensor]
     weights: List[torch.Tensor]
+    accuracy: List[List[float]]
 
 
 def train(
@@ -95,6 +104,7 @@ def train(
     grads = []
     weights = []
     losses: List[List[float]] = [[] for _ in range(n_tasks)]
+    accuracy: List[List[float]] = [[] for _ in range(n_tasks)]
 
     for t in tqdm(range(n_epochs)):
         optim.zero_grad()
@@ -115,6 +125,18 @@ def train(
 
         losses[task_idx].append(loss.item())
 
+        if (type(model) == LeNet5):
+            with torch.no_grad():
+                model.eval()
+                x, y_true = tasks[task_idx]
+                y_prob = model(x)
+                _, predicted_labels = torch.max(y_prob, 1)
+
+                n = y_true.size(0)
+                correct_pred = (predicted_labels == y_true).sum()
+
+            accuracy[task_idx].append(correct_pred.float() / n)
+
         if test_hooks is not None:
             frequency: int
             fn: Callable[[nn.Module, int], None]
@@ -128,4 +150,5 @@ def train(
         optim=optim,
         losses=losses,
         grads=grads,
-        weights=weights)
+        weights=weights,
+        accuracy=accuracy)
