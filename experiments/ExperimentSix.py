@@ -13,7 +13,7 @@ from src.GatedConv2dNew import GatedConv2d
 from src.SeparateModels import SeparateModels
 from src.SharedModel import SharedModel
 from src.gated_utils import train, set_task, TrainResult
-from src.plotting import exponential_average
+#from src.plotting import exponential_average
 from src.utils import seed
 
 from src.LeNet import LeNet5
@@ -89,13 +89,29 @@ def run_experiment(
 
     #tasks: List[ExperimentSixTask] = [generator.create_task() for _ in range(n_tasks)]
 
-    train_mnist = datasets.MNIST('~/datasets/mnist', transform=transforms.ToTensor(), train=True, download=True)
-    train_x: torch.Tensor = torch.stack([x for x, y in train_mnist], dim=0)
-    train_y: torch.Tensor = torch.stack([torch.from_numpy(np.asarray(y)) for x, y in train_mnist], dim=0)
-    test_mnist = datasets.MNIST('~/datasets/mnist', transform=transforms.ToTensor(), train=False, download=True)
-    test_x: torch.Tensor = torch.stack([x for x, y in test_mnist], dim=0)
-    test_y: torch.Tensor = torch.stack([torch.from_numpy(np.asarray(y)) for x, y in test_mnist], dim=0)
+    sizetransforms = transforms.Compose([transforms.Resize((32, 32)), transforms.ToTensor()])
+
+    train_mnist = datasets.MNIST('~/datasets/mnist', transform=sizetransforms, train=True, download=True)
+    temp_train = []
+    for i in range(40):
+        temp_train.append(train_mnist[i])
+    #train_x: torch.Tensor = torch.stack([x for x, y in train_mnist], dim=0)
+    #train_y: torch.Tensor = torch.stack([torch.from_numpy(np.asarray(y)) for x, y in train_mnist], dim=0)
+    train_x: torch.Tensor = torch.stack([x for x, y in temp_train], dim=0)
+    train_y: torch.Tensor = torch.stack([torch.from_numpy(np.asarray(y)) for x, y in temp_train], dim=0).type(torch.LongTensor)
+
+    test_mnist = datasets.MNIST('~/datasets/mnist', transform=sizetransforms, train=False, download=True)
+    temp_test = []
+    for i in range(40):
+        temp_test.append(test_mnist[i])
+    #test_x: torch.Tensor = torch.stack([x for x, y in test_mnist], dim=0)
+    #test_y: torch.Tensor = torch.stack([torch.from_numpy(np.asarray(y)) for x, y in test_mnist], dim=0)
+    test_x: torch.Tensor = torch.stack([x for x, y in temp_test], dim=0)
+    test_y: torch.Tensor = torch.stack([torch.from_numpy(np.asarray(y)) for x, y in temp_test], dim=0).type(torch.LongTensor)
     task_test_data: List[Tuple[torch.Tensor, torch.Tensor]] = [(test_x, test_y)]
+
+    #lenet_model = LeNet5(gated=False)
+    #y_est = lenet_model(train_x)
 
     def test_fn(model: nn.Module, epoch: int):
         task_idx: int
@@ -106,15 +122,17 @@ def run_experiment(
 
             yhat: torch.Tensor = model(x)
             # torch.Tensor[flaot32, cpu] (300, output_dim)
-            loss = nn.MSELoss()(yhat, y)
+            loss = nn.CrossEntropyLoss()(yhat, y)
 
             writer.add_scalar(
                 tag=f"Test Loss: {task_idx}",
                 scalar_value=loss.item(),
                 global_step=epoch)
 
+
+
     model_maker_lookup: Dict[str, Callable[[int], nn.Module]] = {
-        'gated': lambda n_tasks: SeparateModels(lambda: LeNet5(gated=True), n_tasks=n_tasks),
+        'gated': lambda n_tasks: LeNet5(gated=True, n_tasks=1),
         'separate': lambda n_tasks: SeparateModels(lambda: LeNet5(gated=False), n_tasks=n_tasks),
         'shared': lambda n_tasks: SharedModel(LeNet5(gated=False), n_tasks=n_tasks)
     }
@@ -143,7 +161,7 @@ def run_experiment(
         'n_epochs': N_EPOCHS,
         'model': MODEL
     }, metric_dict={
-        f'MSE:({task_idx})': np.mean(loss[-10:]) for task_idx, loss in enumerate(results.losses) if len(loss) > 10
+        f'CrossEntropy:({task_idx})': np.mean(loss[-10:]) for task_idx, loss in enumerate(results.losses) if len(loss) > 10
     })
 
     return results, writer
@@ -159,8 +177,8 @@ if __name__ == "__main__":
     LEARNING_RATE: float = 0.001
     TASK_SPEEDUP: float = N_TASKS * 3
     BATCH_SIZE: int = 32
-    N_EPOCHS: int = 20001
-    MODEL: str = 'shared'  # (gated, shared, separate)
+    N_EPOCHS: int = 100#20001
+    MODEL: str = 'gated'  # (gated, shared, separate)
 
     name: str = input("Enter model name: ")
 
@@ -179,7 +197,17 @@ if __name__ == "__main__":
         n_epochs=N_EPOCHS,
         name=name)
 
+    plt.figure()
     for i in range(len(results.losses)):
-        plt.plot(exponential_average(results.losses[i], gamma=0.98))
+        #plt.plot(exponential_average(results.losses[i], gamma=0.98))
+        plt.plot(results.losses[i])
     plt.title("Loss by task during training")
     plt.legend([i for i in range(len(results.losses))])
+    plt.show()
+
+    plt.figure()
+    for i in range(len(results.accuracy)):
+        plt.plot(results.accuracy[i])
+    plt.title("Accuracy")
+    plt.legend([i for i in range(len(results.accuracy))])
+    plt.show()
