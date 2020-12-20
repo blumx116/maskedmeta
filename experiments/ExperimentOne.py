@@ -13,7 +13,7 @@ from src.GatedLinearNew import GatedLinear
 from src.SeparateModels import SeparateModels
 from src.SharedModel import SharedModel
 from src.gated_utils import train, set_task, TrainResult
-from src.plotting import exponential_average
+from src.plotting import exponential_average, Axes, Figure, mpl_to_tensorboard, plot_dataset_loss
 from src.utils import seed
 
 
@@ -39,7 +39,10 @@ class ExperimentOneTask:
             # torch.Tensor[float32, cpu] (count, in_features)
             if self.input_range is not None:
                 xs = torch.clamp(xs, *self.input_range)
+                # TODO: this isn't great because it might result on a bunch of things
+                # at the edges
             ys: torch.Tensor = F.linear(xs, self.weights, self.bias)
+            ys += torch.normal(mean=0, std=self.noise_scale, size=ys.shape)
             # torch.Tensor[float32, cpu] (count, out_features)
             return xs, ys
 
@@ -79,7 +82,7 @@ class ExperimentOneGenerator:
         else:
             task_bias: Optional[torch.Tensor] = None
 
-        return ExperimentOneTask(task_weights, task_bias, self.input_range, self.noise_scale )
+        return ExperimentOneTask(task_weights, task_bias, self.input_range, self.noise_scale)
 
 
 def run_experiment(
@@ -92,6 +95,7 @@ def run_experiment(
             model: str,
             learning_rate: 3e-4,
             task_speedup: float = None,
+            device: str = 'cpu',
             mask_probability: float = 0.5,
             random_seed: int = 0,
             noise_scale: float = 0.,
@@ -135,28 +139,22 @@ def run_experiment(
     tasks: List[ExperimentOneTask] = [generator.create_task() for _ in range(n_tasks)]
 
     task_train_data: List[Tuple[torch.Tensor, torch.Tensor]] = [task.sample(n_samples) for task in tasks]
+    task_train_data = [(x.to(device), y.to(device)) for x, y in task_train_data]
     task_test_data: List[Tuple[torch.Tensor, torch.Tensor]] = [task.sample(300) for task in tasks]
+    task_test_data = [(x.to(device), y.to(device)) for x, y in task_test_data]
 
     def test_fn(model: nn.Module, epoch: int):
-        task_idx: int
-        x: torch.Tensor  # torch.Tensor[float32, cpu] (300, input_dimi)
-        y: torch.Tensor  # torch.Tensor[float32, cpu] (300, output_dim)
-        for task_idx, (x, y) in enumerate(task_test_data):
-            set_task(model, task_idx)
+        plot_dataset_loss(model, epoch, task_test_data,
+            loss_fn=nn.MSELoss(), writer=writer)
 
-            yhat: torch.Tensor = model(x)
-            # torch.Tensor[flaot32, cpu] (300, output_dim)
-            loss = nn.MSELoss()(yhat, y)
+        plot_dataset_loss(model, epoch, task_train_data,
+            loss_fn=nn.MSELoss(), writer=writer, name="Train Loss: ")
 
-            writer.add_scalar(
-                tag=f"Test Loss: {task_idx}",
-                scalar_value=loss.item(),
-                global_step=epoch)
 
     model_maker_lookup: Dict[str, Callable[[int], nn.Module]] = {
-        'gated': lambda n_tasks: GatedLinear(n_inputs, n_outputs, n_tasks=n_tasks),
-        'separate': lambda n_tasks: SeparateModels(lambda: nn.Linear(n_inputs, n_outputs), n_tasks=n_tasks),
-        'shared': lambda n_tasks: SharedModel(nn.Linear(n_inputs, n_outputs), n_tasks=n_tasks)
+        'gated': lambda n_tasks: GatedLinear(n_inputs, n_outputs, n_tasks=n_tasks).to(device),
+        'separate': lambda n_tasks: SeparateModels(lambda: nn.Linear(n_inputs, n_outputs), n_tasks=n_tasks).to(device),
+        'shared': lambda n_tasks: SharedModel(nn.Linear(n_inputs, n_outputs), n_tasks=n_tasks).to(device)
     }
     # n_tasks here is shadowed, but it shouldn't matter because it's the exact same value
 
@@ -187,21 +185,32 @@ def run_experiment(
         f'MSE:({task_idx})': np.mean(loss[-10:]) for task_idx, loss in enumerate(results.losses) if len(loss) > 10
     })
 
+    fig: Figure
+    ax: Axes
+    fig, ax = plt.subplots(1, 1)
+    for i in range(len(results.losses)):
+        ax.plot(exponential_average(results.losses[i], gamma=0.98))
+    ax.set_title("Loss by task during training")
+    fig.legend([i for i in range(len(results.losses))])
+    writer.add_figure("Train Loss by task during training", fig)
+
     return results, writer
 
 
 if __name__ == "__main__":
-    N_INPUTS: int = 11
-    N_OUTPUTS: int = 11
-    N_TASKS: int = 11
-    SEED: int = 1
-    N_SAMPLES: int = 51
+    N_INPUTS: int = 10
+    N_OUTPUTS: int = 10
+    N_TASKS: int = 10
+    SEED: int = 0
+    N_SAMPLES: int = 32
     MASK_PROBABILITY: float = 0.75
     LEARNING_RATE: float = 3e-5
     TASK_SPEEDUP: float = N_TASKS * 3
-    BATCH_SIZE: int = 4
-    N_EPOCHS: int = 20001
-    MODEL: str = 'shared'  # (gated, shared, separate)
+    BATCH_SIZE: int = 16
+    N_EPOCHS: int = 100000
+    NOISE_SCALE: float = 0.4
+    MODEL: str = 'gated'  # (gated, shared, separate)
+    DEVICE: str = 'cpu'
 
     name: str = input("Enter model name: ")
 
@@ -212,10 +221,11 @@ if __name__ == "__main__":
         mask_probability=MASK_PROBABILITY,
         random_seed=SEED,
         batch_size=BATCH_SIZE,
+        device=DEVICE,
         task_speedup=TASK_SPEEDUP,
         learning_rate=LEARNING_RATE,
         model=MODEL,
-        noise_scale=0.,
+        noise_scale=NOISE_SCALE,
         n_samples=N_SAMPLES,
         n_epochs=N_EPOCHS,
         name=name)
@@ -224,3 +234,6 @@ if __name__ == "__main__":
         plt.plot(exponential_average(results.losses[i], gamma=0.98))
     plt.title("Loss by task during training")
     plt.legend([i for i in range(len(results.losses))])
+    plt.show()
+
+    print("done")
