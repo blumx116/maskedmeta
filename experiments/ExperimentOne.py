@@ -13,7 +13,9 @@ from src.GatedLinearNew import GatedLinear
 from src.SeparateModels import SeparateModels
 from src.SharedModel import SharedModel
 from src.gated_utils import train, set_task, TrainResult
-from src.plotting import exponential_average, Axes, Figure, mpl_to_tensorboard, plot_dataset_loss
+from src.plotting import (
+    exponential_average, Axes, Figure, mpl_to_tensorboard,
+    plot_dataset_loss, plot_linear_layer, plot_task_specific_params)
 from src.utils import seed
 
 
@@ -148,8 +150,12 @@ def run_experiment(
             loss_fn=nn.MSELoss(), writer=writer)
 
         plot_dataset_loss(model, epoch, task_train_data,
-            loss_fn=nn.MSELoss(), writer=writer, name="Train Loss: ")
+            loss_fn=nn.MSELoss(), writer=writer, name="Train/Loss/")
 
+        if isinstance(model, GatedLinear):
+            # TODO: implement for all model types
+            plot_linear_layer(model, epoch, writer, "Weighted",  N_TASKS)
+            plot_linear_layer(model, epoch, writer, "Mask Weights", N_TASKS)
 
     model_maker_lookup: Dict[str, Callable[[int], nn.Module]] = {
         'gated': lambda n_tasks: GatedLinear(n_inputs, n_outputs, n_tasks=n_tasks).to(device),
@@ -166,7 +172,7 @@ def run_experiment(
         tasks=task_train_data,
         criterion=nn.MSELoss(),
         batch_size=batch_size,
-        test_hooks=[(10, test_fn)] + additional_test_hooks,
+        test_hooks=[(1000, test_fn)] + additional_test_hooks,
         n_epochs=n_epochs)
 
     writer.add_hparams(hparam_dict={
@@ -200,13 +206,13 @@ def run_experiment(
 if __name__ == "__main__":
     N_INPUTS: int = 10
     N_OUTPUTS: int = 10
-    N_TASKS: int = 10
+    N_TASKS: int = 50
     SEED: int = 0
-    N_SAMPLES: int = 32
+    N_SAMPLES: int = 10
     MASK_PROBABILITY: float = 0.75
     LEARNING_RATE: float = 3e-5
     TASK_SPEEDUP: float = N_TASKS * 3
-    BATCH_SIZE: int = 16
+    BATCH_SIZE: int = 10
     N_EPOCHS: int = 100000
     NOISE_SCALE: float = 0.4
     MODEL: str = 'gated'  # (gated, shared, separate)
