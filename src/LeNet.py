@@ -1,5 +1,6 @@
 import torch.nn as nn
 from collections import OrderedDict
+from typing import Optional
 
 from .GatedLinearNew import GatedLinear
 from .GatedConv2dNew import GatedConv2d
