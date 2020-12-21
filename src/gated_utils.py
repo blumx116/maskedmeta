@@ -8,9 +8,10 @@ from torch.optim.optimizer import Optimizer
 from tqdm.autonotebook import tqdm
 
 from .MetaModel import MetaModel
-from .utils import sample
+from .utils import sample, sampleLenet
 
 from src.LeNet import LeNet5
+from torch.utils.data import DataLoader
 
 """
 def copy_weights(From: nn.Module, To: nn.Module) -> None:
@@ -125,17 +126,100 @@ def train(
 
         losses[task_idx].append(loss.item())
 
-        if (type(model) == LeNet5):
-            with torch.no_grad():
-                model.eval()
-                x, y_true = tasks[task_idx]
-                y_prob = model(x)
-                _, predicted_labels = torch.max(y_prob, 1)
+        if test_hooks is not None:
+            frequency: int
+            fn: Callable[[nn.Module, int], None]
+            for frequency, fn in test_hooks:
+                if t % frequency == 0:
+                    fn(model, t)
 
-                n = y_true.size(0)
-                correct_pred = (predicted_labels == y_true).sum()
 
-            accuracy[task_idx].append(correct_pred.float() / n)
+    return TrainResult(
+        model=model,
+        optim=optim,
+        losses=losses,
+        grads=grads,
+        weights=weights,
+        accuracy=accuracy)
+
+def validateLenet(valid_loader, model, criterion, device):
+    '''
+    Function for the validation step of the training loop
+    '''
+
+    model.eval()
+    running_loss = 0
+
+    for X, y_true in valid_loader:
+        X = X
+        y_true = y_true
+
+        # Forward pass and record loss
+        y_hat = model(X)
+        loss = criterion(y_hat, y_true)
+        running_loss += loss.item() * X.size(0)
+
+    epoch_loss = running_loss / len(valid_loader.dataset)
+
+    return model, epoch_loss
+
+##Function taken from https://github.com/erykml/medium_articles/blob/master/Computer%20Vision/lenet5_pytorch.ipynb
+def getLenetAccuracy(model, data_loader, device):
+    correct_pred = 0
+    n = 0
+
+    with torch.no_grad():
+        model.eval()
+        for X, y_true in data_loader:
+            X = X
+            y_true = y_true
+
+            y_prob = model(X)
+            _, predicted_labels = torch.max(y_prob, 1)
+
+            n += y_true.size(0)
+            correct_pred += (predicted_labels == y_true).sum()
+
+    return correct_pred.float() / n
+
+def trainLenet(
+        make_model: Callable[[int], nn.Module], # (n_tasks) => model
+        make_optim: Callable[[Iterable[nn.Parameter], Iterable[nn.Parameter]], Optimizer], # (weight params, mask params) => optimizer
+        tasks,
+        criterion: nn.Module,
+        batch_size: int=32,
+        test_hooks: Optional[List[Tuple[int, Callable[[nn.Module, int], None]]]] = None,
+        n_epochs: int = 10000) -> TrainResult:
+    assert len(tasks) > 0
+
+    n_tasks: int = len(tasks)
+    model: nn.Module = make_model(n_tasks)
+    task_params_l: List[nn.ParameterList] = [get_task_parameters(model, idx) for idx in range(n_tasks)]
+    task_params: nn.ParameterList = nn.ParameterList(chain(*task_params_l))
+    optim: Optimizer = make_optim(get_shared_parameters(model), task_params)
+    grads = []
+    weights = []
+    losses: List[List[float]] = [[] for _ in range(n_tasks)]
+    accuracy: List[List[float]] = [[] for _ in range(n_tasks)]
+
+    for t in tqdm(range(n_epochs)):
+        optim.zero_grad()
+        task_idx: int = np.random.randint(0, n_tasks)
+        # task_idx: int = 1
+
+        set_task(model, task_idx)
+
+        x: torch.Tensor
+        y: torch.Tensor
+        x, y = sampleLenet(tasks[task_idx], batch_size)
+
+        yhat: torch.Tensor = model(x)
+        loss: torch.Tensor = criterion(yhat, y)
+
+        loss.backward()
+        optim.step()
+
+        losses[task_idx].append(loss.item())
 
         if test_hooks is not None:
             frequency: int
