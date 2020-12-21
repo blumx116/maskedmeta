@@ -12,7 +12,7 @@ from torch.optim import Adam
 from src.GatedLinearNew import GatedLinear
 from src.SeparateModels import SeparateModels
 from src.SharedModel import SharedModel
-from src.gated_utils import train, set_task, TrainResult, mask_regularizer
+from src.gated_utils import train, set_task, TrainResult, get_mask_regularizer
 from src.plotting import (
     exponential_average, Axes, Figure, mpl_to_tensorboard,
     plot_dataset_loss, plot_linear_layer, plot_task_specific_params)
@@ -103,6 +103,8 @@ def run_experiment(
             random_seed: int = 0,
             noise_scale: float = 0.,
             name: str = None,
+            regularizer: str = 'none',
+            reg_weight: float = 1.,
             additional_test_hooks: Optional[List[Tuple[int, Callable[[nn.Module, int], None]]]] = [])\
             -> (TrainResult, SummaryWriter):
     if random_seed is not None:
@@ -174,7 +176,7 @@ def run_experiment(
         batch_size=batch_size,
         test_hooks=[(1000, test_fn)] + additional_test_hooks,
         n_epochs=n_epochs,
-        regularizer=mask_regularizer)
+        regularizer=get_mask_regularizer(regularizer, reg_weight))
 
     writer.add_hparams(hparam_dict={
         'n_inputs': N_INPUTS,
@@ -214,10 +216,12 @@ if __name__ == "__main__":
     LEARNING_RATE: float = 3e-5
     TASK_SPEEDUP: float = N_TASKS * 3
     BATCH_SIZE: int = 10
-    N_EPOCHS: int = 100000
+    N_EPOCHS: int = 50000
     NOISE_SCALE: float = 0.0
     MODEL: str = 'gated'  # (gated, shared, separate)
     DEVICE: str = 'cpu'
+    REGULARIZER: str = 'abs'
+    REG_WEIGHT:  float = 1.
 
     name: str = input("Enter model name: ")
 
@@ -235,7 +239,9 @@ if __name__ == "__main__":
         noise_scale=NOISE_SCALE,
         n_samples=N_SAMPLES,
         n_epochs=N_EPOCHS,
-        name=name)
+        name=name,
+        reg_weight=REG_WEIGHT,
+        regularizer=REGULARIZER)
 
     for i in range(len(results.losses)):
         plt.plot(exponential_average(results.losses[i], gamma=0.98))
