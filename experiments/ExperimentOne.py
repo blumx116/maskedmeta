@@ -12,8 +12,10 @@ from torch.optim import Adam
 from src.GatedLinearNew import GatedLinear
 from src.SeparateModels import SeparateModels
 from src.SharedModel import SharedModel
-from src.gated_utils import train, set_task, TrainResult
-from src.plotting import exponential_average, Axes, Figure, mpl_to_tensorboard, plot_dataset_loss
+from src.gated_utils import train, set_task, TrainResult, get_mask_regularizer
+from src.plotting import (
+    exponential_average, Axes, Figure, mpl_to_tensorboard,
+    plot_dataset_loss, plot_linear_layer, plot_task_specific_params)
 from src.utils import seed
 
 
@@ -42,7 +44,8 @@ class ExperimentOneTask:
                 # TODO: this isn't great because it might result on a bunch of things
                 # at the edges
             ys: torch.Tensor = F.linear(xs, self.weights, self.bias)
-            ys += torch.normal(mean=0, std=self.noise_scale, size=ys.shape)
+            if self.noise_scale != 0:
+                ys += torch.normal(mean=0, std=self.noise_scale, size=ys.shape)
             # torch.Tensor[float32, cpu] (count, out_features)
             return xs, ys
 
@@ -100,6 +103,8 @@ def run_experiment(
             random_seed: int = 0,
             noise_scale: float = 0.,
             name: str = None,
+            regularizer: str = 'none',
+            reg_weight: float = 1.,
             additional_test_hooks: Optional[List[Tuple[int, Callable[[nn.Module, int], None]]]] = [])\
             -> (TrainResult, SummaryWriter):
     if random_seed is not None:
@@ -129,7 +134,6 @@ def run_experiment(
     else:
         writer: SummaryWriter
 
-
     generator: ExperimentOneGenerator = ExperimentOneGenerator(
         n_inputs,
         n_outputs,
@@ -148,8 +152,12 @@ def run_experiment(
             loss_fn=nn.MSELoss(), writer=writer)
 
         plot_dataset_loss(model, epoch, task_train_data,
-            loss_fn=nn.MSELoss(), writer=writer, name="Train Loss: ")
+            loss_fn=nn.MSELoss(), writer=writer, name="Train/Loss/")
 
+        if isinstance(model, GatedLinear):
+            # TODO: implement for all model types
+            plot_linear_layer(model, epoch, writer, "Weighted",  N_TASKS)
+            plot_linear_layer(model, epoch, writer, "Mask Weights", N_TASKS)
 
     model_maker_lookup: Dict[str, Callable[[int], nn.Module]] = {
         'gated': lambda n_tasks: GatedLinear(n_inputs, n_outputs, n_tasks=n_tasks).to(device),
@@ -166,8 +174,9 @@ def run_experiment(
         tasks=task_train_data,
         criterion=nn.MSELoss(),
         batch_size=batch_size,
-        test_hooks=[(10, test_fn)] + additional_test_hooks,
-        n_epochs=n_epochs)
+        test_hooks=[(1000, test_fn)] + additional_test_hooks,
+        n_epochs=n_epochs,
+        regularizer=get_mask_regularizer(regularizer, reg_weight))
 
     writer.add_hparams(hparam_dict={
         'n_inputs': N_INPUTS,
@@ -198,42 +207,64 @@ def run_experiment(
 
 
 if __name__ == "__main__":
-    N_INPUTS: int = 10
-    N_OUTPUTS: int = 10
-    N_TASKS: int = 10
-    SEED: int = 0
-    N_SAMPLES: int = 32
-    MASK_PROBABILITY: float = 0.75
-    LEARNING_RATE: float = 3e-5
-    TASK_SPEEDUP: float = N_TASKS * 3
-    BATCH_SIZE: int = 16
-    N_EPOCHS: int = 100000
-    NOISE_SCALE: float = 0.4
-    MODEL: str = 'gated'  # (gated, shared, separate)
-    DEVICE: str = 'cpu'
+    regularizer: str
+    model: str
+    reg_weight: float
 
-    name: str = input("Enter model name: ")
+    for regularizer, model, reg_weight in [
+        ('gaussian', 'gated', 0.2),
+        ('gaussian', 'gated', 1.),
+        ('gaussian', 'gated', 0.05),
+        ('abs', 'gated', 0.2),
+        ('abs', 'gated', 1.),
+        ('abs', 'gated', 0.05),
+        ('none', 'gated', 0.05),
+        ('none', 'separate', 1.),
+        ('abs', 'separate', 1.), # should be identical to above
+        ('none', 'shared', 1.),
+        ('abs', 'shared', 1.)]:# should be same as above]
 
-    results, writer = run_experiment(
-        n_inputs=N_INPUTS,
-        n_outputs=N_OUTPUTS,
-        n_tasks=N_TASKS,
-        mask_probability=MASK_PROBABILITY,
-        random_seed=SEED,
-        batch_size=BATCH_SIZE,
-        device=DEVICE,
-        task_speedup=TASK_SPEEDUP,
-        learning_rate=LEARNING_RATE,
-        model=MODEL,
-        noise_scale=NOISE_SCALE,
-        n_samples=N_SAMPLES,
-        n_epochs=N_EPOCHS,
-        name=name)
+        N_INPUTS: int = 10
+        N_OUTPUTS: int = 1
+        N_TASKS: int = 50
+        SEED: int = 0
+        N_SAMPLES: int = 5
+        MASK_PROBABILITY: float = 0.75
+        LEARNING_RATE: float = 3e-5
+        TASK_SPEEDUP: float = N_TASKS * 3
+        BATCH_SIZE: int = 5
+        N_EPOCHS: int = 50000
+        NOISE_SCALE: float = 0.2
+        MODEL: str = 'gated'  # (gated, shared, separate)
+        DEVICE: str = 'cpu'
+        REGULARIZER: str = 'gaussian'  # (gaussian, abs, none)
+        REG_WEIGHT:  float = 0.2
 
-    for i in range(len(results.losses)):
-        plt.plot(exponential_average(results.losses[i], gamma=0.98))
-    plt.title("Loss by task during training")
-    plt.legend([i for i in range(len(results.losses))])
-    plt.show()
+        # name: str = input("Enter model name: ")
+        name = f'batch {regularizer} {model} {reg_weight}'
 
-    print("done")
+        results, writer = run_experiment(
+            n_inputs=N_INPUTS,
+            n_outputs=N_OUTPUTS,
+            n_tasks=N_TASKS,
+            mask_probability=MASK_PROBABILITY,
+            random_seed=SEED,
+            batch_size=BATCH_SIZE,
+            device=DEVICE,
+            task_speedup=TASK_SPEEDUP,
+            learning_rate=LEARNING_RATE,
+            model=MODEL,
+            noise_scale=NOISE_SCALE,
+            n_samples=N_SAMPLES,
+            n_epochs=N_EPOCHS,
+            name=name,
+            reg_weight=REG_WEIGHT,
+            regularizer=REGULARIZER)
+
+        for i in range(len(results.losses)):
+            plt.plot(exponential_average(results.losses[i], gamma=0.98))
+        plt.title("Loss by task during training")
+        plt.legend([i for i in range(len(results.losses))])
+        plt.show()
+
+        print("done")

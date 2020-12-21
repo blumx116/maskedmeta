@@ -9,7 +9,8 @@ import tensorflow as tf
 import torch
 import torch.nn as nn
 
-from src.gated_utils import set_task
+from src.gated_utils import set_task, get_task_parameters
+from src.GatedLinearNew import GatedLinear
 
 
 def exponential_average(vals, gamma=0.99):
@@ -47,3 +48,43 @@ def plot_dataset_loss(model: nn.Module, epoch: int,
             tag=name + " " + str(task_idx),
             scalar_value=loss.item(),
             global_step=epoch)
+
+
+def plot_task_specific_params(model: nn.Module, epoch: int,
+        writer: SummaryWriter, name: str, n_tasks: int) -> None:
+    task_idx: int
+    for task_idx in range(n_tasks):
+        parameter: nn.Parameter
+        for i, parameter in enumerate(get_task_parameters(model, task_idx)):
+            writer.add_histogram(
+                tag=name + f":{i}({task_idx})",
+                global_step=epoch,
+                values=parameter.detach().flatten().cpu())
+
+
+def plot_linear_layer(model: nn.Module, epoch: int,
+        writer: SummaryWriter, name: str, n_tasks: int) -> None:
+    """
+    in progress: should report stuff over time
+    """
+    task_idx: int
+    for task_idx in range(n_tasks):
+        w: nn.Parameter
+        b: nn.Parameter
+        if isinstance(model, nn.Linear):
+            # NOTE: this results in duplicate plots for linear models
+            # intentional
+            w = model.weight.detach()
+            b = model.bias.detach()
+        elif isinstance(model, GatedLinear):
+            model.set_task(task_idx)
+            w = model.get_current_W().detach()
+            b = model.get_current_b().detach()
+        else:
+            raise Exception("currently only linear layers supported!")
+        writer.add_histogram(
+            tag=name + ":W " + str(task_idx),
+            values=torch.flatten(w).cpu(), global_step=epoch)
+        writer.add_histogram(
+            tag=name+":b " + str(task_idx),
+            values=torch.flatten(b).cpu(), global_step=epoch)
