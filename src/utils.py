@@ -5,8 +5,6 @@ import torch
 from torch._six import container_abcs
 
 
-
-
 def seed(rand_seed):
     np.random.seed(rand_seed)
     torch.manual_seed(rand_seed)
@@ -32,6 +30,16 @@ def sample(x: torch.Tensor, y: torch.Tensor, batch_size: int):
     selected = np.random.choice(n_datapoints, size=batch_size)
     # sample with replacement
     return x[selected, :], y[selected]
+
+def sampleLenet(mnist, batch_size: int):
+    n_datapoints = len(mnist)
+    selected = np.random.choice(n_datapoints, size=batch_size)
+    batch = []
+    for s in selected:
+        batch.append(mnist[s])
+    x: torch.Tensor = torch.stack([x for x, y in batch], dim=0)
+    y: torch.Tensor = torch.stack([torch.from_numpy(np.asarray(y)) for x, y in batch], dim=0).type(torch.LongTensor)
+    return x, y
 
 
 # ----------------------- #
