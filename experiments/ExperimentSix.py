@@ -12,11 +12,15 @@ from torch.optim import Adam
 from src.GatedConv2dNew import GatedConv2d
 from src.SeparateModels import SeparateModels
 from src.SharedModel import SharedModel
-from src.gated_utils import train, set_task, TrainResult
-#from src.plotting import exponential_average
+from src.gated_utils import train, set_task, TrainResult, trainLenet, getLenetAccuracy, validateLenet
+from src.plotting import plot_dataset_loss
 from src.utils import seed
 
 from src.LeNet import LeNet5
+from src.LeNet import transform_grayscale_to_RGB
+from torch.utils.data import DataLoader
+
+from time import time
 
 import argparse
 from torchvision import datasets, transforms
@@ -24,20 +28,7 @@ from torch import nn, optim, autograd
 import matplotlib.pyplot as plt
 import torchvision
 
-#train_mnist = datasets.MNIST('~/datasets/mnist', transform=transforms.ToTensor(), train=True, download=True)
-#test_mnist = datasets.MNIST('~/datasets/mnist', transform=transforms.ToTensor(), train=False, download=True)
-
-class ExperimentSixGenerator:
-    def __init__(self,
-            in_channels: int,
-            out_channels: int):
-        self.in_channels = in_channels
-        self.out_channels = out_channels
-
-    def create_task(self):
-        #use this later to differentiate tasks
-        a = 1
-
+DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 def run_experiment(
             n_inputs: int,
@@ -83,52 +74,78 @@ def run_experiment(
         writer: SummaryWriter
 
 
-    generator: ExperimentSixGenerator = ExperimentSixGenerator(
-        n_inputs,
-        n_outputs)
-
-    #tasks: List[ExperimentSixTask] = [generator.create_task() for _ in range(n_tasks)]
-
-    sizetransforms = transforms.Compose([transforms.Resize((32, 32)), transforms.ToTensor()])
-
+    sizetransforms = transforms.Compose([transforms.Resize((32, 32)), transforms.ToTensor(), transform_grayscale_to_RGB([0, 0, 0])])
+    #download and create datasets
     train_mnist = datasets.MNIST('~/datasets/mnist', transform=sizetransforms, train=True, download=True)
-    temp_train = []
-    for i in range(40):
-        temp_train.append(train_mnist[i])
-    #train_x: torch.Tensor = torch.stack([x for x, y in train_mnist], dim=0)
-    #train_y: torch.Tensor = torch.stack([torch.from_numpy(np.asarray(y)) for x, y in train_mnist], dim=0)
-    train_x: torch.Tensor = torch.stack([x for x, y in temp_train], dim=0)
-    train_y: torch.Tensor = torch.stack([torch.from_numpy(np.asarray(y)) for x, y in temp_train], dim=0).type(torch.LongTensor)
-
     test_mnist = datasets.MNIST('~/datasets/mnist', transform=sizetransforms, train=False, download=True)
-    temp_test = []
-    for i in range(40):
-        temp_test.append(test_mnist[i])
-    #test_x: torch.Tensor = torch.stack([x for x, y in test_mnist], dim=0)
-    #test_y: torch.Tensor = torch.stack([torch.from_numpy(np.asarray(y)) for x, y in test_mnist], dim=0)
-    test_x: torch.Tensor = torch.stack([x for x, y in temp_test], dim=0)
-    test_y: torch.Tensor = torch.stack([torch.from_numpy(np.asarray(y)) for x, y in temp_test], dim=0).type(torch.LongTensor)
-    task_test_data: List[Tuple[torch.Tensor, torch.Tensor]] = [(test_x, test_y)]
+    #define data loaders
+    train_loader = DataLoader(dataset=train_mnist,
+                          batch_size=len(train_mnist),
+                          shuffle=True)
+    test_loader = DataLoader(dataset=test_mnist,
+                              batch_size=len(test_mnist),
+                              shuffle=True)
 
-    #lenet_model = LeNet5(gated=False)
-    #y_est = lenet_model(train_x)
+
+    task_train_data = [train_mnist]
+    task_test_data = [test_mnist]
+    task_train_loader: List[DataLoader] = [train_loader]
+    task_test_loader: List[DataLoader] = [test_loader]
 
     def test_fn(model: nn.Module, epoch: int):
         task_idx: int
-        x: torch.Tensor  # torch.Tensor[float32, cpu] (300, input_dimi)
-        y: torch.Tensor  # torch.Tensor[float32, cpu] (300, output_dim)
-        for task_idx, (x, y) in enumerate(task_test_data):
-            set_task(model, task_idx)
+        criterion = nn.CrossEntropyLoss()
 
-            yhat: torch.Tensor = model(x)
-            # torch.Tensor[flaot32, cpu] (300, output_dim)
-            loss = nn.CrossEntropyLoss()(yhat, y)
+        for task_idx, tr_loader in enumerate(task_train_loader):
+            model.eval()
+            running_loss = 0
+            correct_pred = 0
+            n = 0
 
+            for X, y_true in tr_loader:
+                # Forward pass and record loss
+                y_hat = model(X)
+                loss = criterion(y_hat, y_true)
+                running_loss += loss.item() * X.size(0)
+                _, predicted_labels = torch.max(y_hat, 1)
+                n += y_true.size(0)
+                correct_pred += (predicted_labels == y_true).sum()
+
+            train_loss = running_loss / len(tr_loader.dataset)
+            train_accuracy = correct_pred.float() / n
             writer.add_scalar(
-                tag=f"Test Loss: {task_idx}",
-                scalar_value=loss.item(),
+                tag="Train Loss: " + str(task_idx),
+                scalar_value=train_loss,
                 global_step=epoch)
+            writer.add_scalar(
+                tag="Training Accuracy " + str(task_idx),
+                scalar_value=train_accuracy,
+                global_step=epoch)
+        for task_idx, ts_loader in enumerate(task_test_loader):
+            model.eval()
+            running_loss = 0
+            correct_pred = 0
+            n = 0
 
+            for X, y_true in ts_loader:
+                # Forward pass and record loss
+                y_hat = model(X)
+                loss = criterion(y_hat, y_true)
+                running_loss += loss.item() * X.size(0)
+                _, predicted_labels = torch.max(y_hat, 1)
+                n += y_true.size(0)
+                correct_pred += (predicted_labels == y_true).sum()
+
+            test_loss = running_loss / len(ts_loader.dataset)
+            test_accuracy = correct_pred.float() / n
+            writer.add_scalar(
+                tag="Test Loss: " + str(task_idx),
+                scalar_value=test_loss,
+                global_step=epoch)
+            writer.add_scalar(
+                tag="Testing Accuracy " + str(task_idx),
+                scalar_value=test_accuracy,
+                global_step=epoch)
 
 
     model_maker_lookup: Dict[str, Callable[[int], nn.Module]] = {
@@ -138,12 +155,12 @@ def run_experiment(
     }
     # n_tasks here is shadowed, but it shouldn't matter because it's the exact same value
 
-    results = train(
+    results = trainLenet(
         make_model=model_maker_lookup[model],
         make_optim=lambda shared_params, task_params: Adam([
             {'params': shared_params, 'lr': learning_rate},
             {'params': task_params, 'lr': learning_rate * task_speedup}]),
-        tasks=[(train_x, train_y)],
+        tasks=task_train_data,
         criterion=nn.CrossEntropyLoss(),
         test_hooks=[(10, test_fn)] + additional_test_hooks,
         n_epochs=n_epochs)
@@ -154,7 +171,6 @@ def run_experiment(
         'n_tasks': N_TASKS,
         'seed': SEED,
         'num_samples': N_SAMPLES,
-        'mask_proba': MASK_PROBABILITY,
         'lr': LEARNING_RATE,
         'task multiplier': TASK_SPEEDUP,
         'batch_size': BATCH_SIZE,
@@ -177,10 +193,12 @@ if __name__ == "__main__":
     LEARNING_RATE: float = 0.001
     TASK_SPEEDUP: float = N_TASKS * 3
     BATCH_SIZE: int = 32
-    N_EPOCHS: int = 100#20001
+    N_EPOCHS: int = 500#20001
     MODEL: str = 'gated'  # (gated, shared, separate)
 
     name: str = input("Enter model name: ")
+
+    start = time()
 
     results, writer = run_experiment(
         n_inputs=N_INPUTS,
@@ -197,17 +215,20 @@ if __name__ == "__main__":
         n_epochs=N_EPOCHS,
         name=name)
 
-    plt.figure()
+    stop = time()
+    print(str(stop-start)+'seconds')
+
+    '''plt.figure()
     for i in range(len(results.losses)):
         #plt.plot(exponential_average(results.losses[i], gamma=0.98))
         plt.plot(results.losses[i])
     plt.title("Loss by task during training")
     plt.legend([i for i in range(len(results.losses))])
-    plt.show()
+    plt.show()'''
 
-    plt.figure()
+    '''plt.figure()
     for i in range(len(results.accuracy)):
         plt.plot(results.accuracy[i])
     plt.title("Accuracy")
     plt.legend([i for i in range(len(results.accuracy))])
-    plt.show()
+    plt.show()'''
