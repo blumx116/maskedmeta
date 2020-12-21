@@ -1,9 +1,18 @@
 import torch.nn as nn
 from collections import OrderedDict
 
+import torch
+
 from .GatedLinearNew import GatedLinear
 from .GatedConv2dNew import GatedConv2d
 
+class transform_grayscale_to_RGB:
+    def __init__(self, color):
+        self.color = color
+    def __call__(self, pic):
+        return torch.stack([pic[0]+(1-pic[0])*self.color[i] for i in range(3)])
+    def __repr__(self):
+        return 'grayscale_to_RGB()'
 
 class C1(nn.Module):
     def __init__(self, gated: bool = False, n_tasks: int = 1):
@@ -12,13 +21,13 @@ class C1(nn.Module):
         Conv = GatedConv2d if gated else nn.Conv2d
         if gated:
             self.c1 = nn.Sequential(OrderedDict([
-                ('c1', Conv(1, 6, kernel_size=(5, 5), n_tasks=n_tasks)),
+                ('c1', Conv(3, 6, kernel_size=(5, 5), n_tasks=n_tasks)),
                 ('relu1', nn.ReLU()),
                 ('s1', nn.MaxPool2d(kernel_size=(2, 2), stride=2))
             ]))
         else:
             self.c1 = nn.Sequential(OrderedDict([
-                ('c1', Conv(1, 6, kernel_size=(5, 5))),
+                ('c1', Conv(3, 6, kernel_size=(5, 5))),
                 ('relu1', nn.ReLU()),
                 ('s1', nn.MaxPool2d(kernel_size=(2, 2), stride=2))
             ]))
