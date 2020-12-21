@@ -207,46 +207,64 @@ def run_experiment(
 
 
 if __name__ == "__main__":
-    N_INPUTS: int = 2
-    N_OUTPUTS: int = 1
-    N_TASKS: int = 2
-    SEED: int = 0
-    N_SAMPLES: int = 10
-    MASK_PROBABILITY: float = 0.75
-    LEARNING_RATE: float = 3e-5
-    TASK_SPEEDUP: float = N_TASKS * 3
-    BATCH_SIZE: int = 10
-    N_EPOCHS: int = 50000
-    NOISE_SCALE: float = 0.0
-    MODEL: str = 'gated'  # (gated, shared, separate)
-    DEVICE: str = 'cpu'
-    REGULARIZER: str = 'abs'
-    REG_WEIGHT:  float = 1.
+    regularizer: str
+    model: str
+    reg_weight: float
 
-    name: str = input("Enter model name: ")
+    for regularizer, model, reg_weight in [
+        ('gaussian', 'gated', 0.2),
+        ('gaussian', 'gated', 1.),
+        ('gaussian', 'gated', 0.05),
+        ('abs', 'gated', 0.2),
+        ('abs', 'gated', 1.),
+        ('abs', 'gated', 0.05),
+        ('none', 'gated', 0.05),
+        ('none', 'separate', 1.),
+        ('abs', 'separate', 1.), # should be identical to above
+        ('none', 'shared', 1.),
+        ('abs', 'shared', 1.)]:# should be same as above]
 
-    results, writer = run_experiment(
-        n_inputs=N_INPUTS,
-        n_outputs=N_OUTPUTS,
-        n_tasks=N_TASKS,
-        mask_probability=MASK_PROBABILITY,
-        random_seed=SEED,
-        batch_size=BATCH_SIZE,
-        device=DEVICE,
-        task_speedup=TASK_SPEEDUP,
-        learning_rate=LEARNING_RATE,
-        model=MODEL,
-        noise_scale=NOISE_SCALE,
-        n_samples=N_SAMPLES,
-        n_epochs=N_EPOCHS,
-        name=name,
-        reg_weight=REG_WEIGHT,
-        regularizer=REGULARIZER)
+        N_INPUTS: int = 10
+        N_OUTPUTS: int = 1
+        N_TASKS: int = 50
+        SEED: int = 0
+        N_SAMPLES: int = 5
+        MASK_PROBABILITY: float = 0.75
+        LEARNING_RATE: float = 3e-5
+        TASK_SPEEDUP: float = N_TASKS * 3
+        BATCH_SIZE: int = 5
+        N_EPOCHS: int = 50000
+        NOISE_SCALE: float = 0.2
+        MODEL: str = 'gated'  # (gated, shared, separate)
+        DEVICE: str = 'cpu'
+        REGULARIZER: str = 'gaussian'  # (gaussian, abs, none)
+        REG_WEIGHT:  float = 0.2
 
-    for i in range(len(results.losses)):
-        plt.plot(exponential_average(results.losses[i], gamma=0.98))
-    plt.title("Loss by task during training")
-    plt.legend([i for i in range(len(results.losses))])
-    plt.show()
+        # name: str = input("Enter model name: ")
+        name = f'batch {regularizer} {model} {reg_weight}'
 
-    print("done")
+        results, writer = run_experiment(
+            n_inputs=N_INPUTS,
+            n_outputs=N_OUTPUTS,
+            n_tasks=N_TASKS,
+            mask_probability=MASK_PROBABILITY,
+            random_seed=SEED,
+            batch_size=BATCH_SIZE,
+            device=DEVICE,
+            task_speedup=TASK_SPEEDUP,
+            learning_rate=LEARNING_RATE,
+            model=MODEL,
+            noise_scale=NOISE_SCALE,
+            n_samples=N_SAMPLES,
+            n_epochs=N_EPOCHS,
+            name=name,
+            reg_weight=REG_WEIGHT,
+            regularizer=REGULARIZER)
+
+        for i in range(len(results.losses)):
+            plt.plot(exponential_average(results.losses[i], gamma=0.98))
+        plt.title("Loss by task during training")
+        plt.legend([i for i in range(len(results.losses))])
+        plt.show()
+
+        print("done")
