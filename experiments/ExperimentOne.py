@@ -12,7 +12,7 @@ from torch.optim import Adam
 from src.GatedLinearNew import GatedLinear
 from src.SeparateModels import SeparateModels
 from src.SharedModel import SharedModel
-from src.gated_utils import train, set_task, TrainResult
+from src.gated_utils import train, set_task, TrainResult, mask_regularizer
 from src.plotting import (
     exponential_average, Axes, Figure, mpl_to_tensorboard,
     plot_dataset_loss, plot_linear_layer, plot_task_specific_params)
@@ -44,7 +44,8 @@ class ExperimentOneTask:
                 # TODO: this isn't great because it might result on a bunch of things
                 # at the edges
             ys: torch.Tensor = F.linear(xs, self.weights, self.bias)
-            ys += torch.normal(mean=0, std=self.noise_scale, size=ys.shape)
+            if self.noise_scale != 0:
+                ys += torch.normal(mean=0, std=self.noise_scale, size=ys.shape)
             # torch.Tensor[float32, cpu] (count, out_features)
             return xs, ys
 
@@ -131,7 +132,6 @@ def run_experiment(
     else:
         writer: SummaryWriter
 
-
     generator: ExperimentOneGenerator = ExperimentOneGenerator(
         n_inputs,
         n_outputs,
@@ -173,7 +173,8 @@ def run_experiment(
         criterion=nn.MSELoss(),
         batch_size=batch_size,
         test_hooks=[(1000, test_fn)] + additional_test_hooks,
-        n_epochs=n_epochs)
+        n_epochs=n_epochs,
+        regularizer=mask_regularizer)
 
     writer.add_hparams(hparam_dict={
         'n_inputs': N_INPUTS,
@@ -204,9 +205,9 @@ def run_experiment(
 
 
 if __name__ == "__main__":
-    N_INPUTS: int = 10
-    N_OUTPUTS: int = 10
-    N_TASKS: int = 50
+    N_INPUTS: int = 2
+    N_OUTPUTS: int = 1
+    N_TASKS: int = 2
     SEED: int = 0
     N_SAMPLES: int = 10
     MASK_PROBABILITY: float = 0.75
@@ -214,7 +215,7 @@ if __name__ == "__main__":
     TASK_SPEEDUP: float = N_TASKS * 3
     BATCH_SIZE: int = 10
     N_EPOCHS: int = 100000
-    NOISE_SCALE: float = 0.4
+    NOISE_SCALE: float = 0.0
     MODEL: str = 'gated'  # (gated, shared, separate)
     DEVICE: str = 'cpu'
 

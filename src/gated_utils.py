@@ -11,6 +11,8 @@ from .MetaModel import MetaModel
 from .utils import sample
 
 from src.LeNet import LeNet5
+from src.GatedLinearNew import GatedLinear
+from src.GatedConv2dNew import GatedConv2d
 
 """
 def copy_weights(From: nn.Module, To: nn.Module) -> None:
@@ -29,6 +31,28 @@ def copy_weights(From: nn.Module, To: nn.Module) -> None:
     else:
         To.load_state_dict(From.state_dict())
 """
+
+
+def gaussian_nonzero_mask(weights: nn.Parameter) -> torch.Tensor:
+    return torch.sum(torch.exp(-(weights ** 2)))
+
+def abs_nonzero_mask(weights: nn.Parameter) -> torch.Tensor:
+    return torch.sum(torch.exp(-torch.abs(weights)))
+
+def mask_regularizer(
+        model: nn.Module,
+        fn: Callable[[nn.Parameter], torch.Tensor] = gaussian_nonzero_mask) -> torch.Tensor:
+    # NOTE: this only regularizes THE CURRENT TASK
+    result: torch.Tensor = torch.from_numpy(np.asarray(0.))
+    if isinstance(model, (GatedLinear, GatedConv2d)):
+        result += fn(model.WMs[model.cur_task_idx])
+        result += fn(model.bMs[model.cur_task_idx])
+    elif isinstance(model, (nn.Sequential, LeNet5)):
+        module: nn.Module
+        for module in model.modules():
+            result += mask_regularizer(module, fn)
+    return result
+
 
 def set_task(
         module: nn.Module,
@@ -93,7 +117,8 @@ def train(
         criterion: nn.Module,
         batch_size: int=32,
         test_hooks: Optional[List[Tuple[int, Callable[[nn.Module, int], None]]]] = None,
-        n_epochs: int = 10000) -> TrainResult:
+        n_epochs: int = 10000,
+        regularizer: Optional[Callable[[nn.Module], torch.Tensor]] = None) -> TrainResult:
     assert len(tasks) > 0
 
     n_tasks: int = len(tasks)
@@ -119,6 +144,8 @@ def train(
 
         yhat: torch.Tensor = model(x)
         loss: torch.Tensor = criterion(yhat, y)
+        if regularizer is not None:
+            loss += regularizer(model)
 
         loss.backward()
         optim.step()
