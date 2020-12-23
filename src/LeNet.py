@@ -15,6 +15,14 @@ class transform_grayscale_to_RGB:
     def __repr__(self):
         return 'grayscale_to_RGB()'
 
+class transform_grayscale_to_RGB_inverse:
+    def __init__(self, color):
+        self.color = color
+    def __call__(self, pic):
+        return torch.stack([(1-pic[0])+pic[0]*self.color[i] for i in range(3)])
+    def __repr__(self):
+        return 'grayscale_to_RGB_inverse()'
+
 class C1(nn.Module):
     def __init__(self, gated: bool = False, n_tasks: int = 1):
         super(C1, self).__init__()
