@@ -167,46 +167,6 @@ def train(
         weights=weights,
         accuracy=accuracy)
 
-def validateLenet(valid_loader, model, criterion, device):
-    '''
-    Function for the validation step of the training loop
-    '''
-
-    model.eval()
-    running_loss = 0
-
-    for X, y_true in valid_loader:
-        X = X
-        y_true = y_true
-
-        # Forward pass and record loss
-        y_hat = model(X)
-        loss = criterion(y_hat, y_true)
-        running_loss += loss.item() * X.size(0)
-
-    epoch_loss = running_loss / len(valid_loader.dataset)
-
-    return model, epoch_loss
-
-##Function taken from https://github.com/erykml/medium_articles/blob/master/Computer%20Vision/lenet5_pytorch.ipynb
-def getLenetAccuracy(model, data_loader, device):
-    correct_pred = 0
-    n = 0
-
-    with torch.no_grad():
-        model.eval()
-        for X, y_true in data_loader:
-            X = X
-            y_true = y_true
-
-            y_prob = model(X)
-            _, predicted_labels = torch.max(y_prob, 1)
-
-            n += y_true.size(0)
-            correct_pred += (predicted_labels == y_true).sum()
-
-    return correct_pred.float() / n
-
 def trainLenet(
         make_model: Callable[[int], nn.Module], # (n_tasks) => model
         make_optim: Callable[[Iterable[nn.Parameter], Iterable[nn.Parameter]], Optimizer], # (weight params, mask params) => optimizer
