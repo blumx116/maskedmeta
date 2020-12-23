@@ -12,12 +12,12 @@ from torch.optim import Adam
 from src.GatedConv2dNew import GatedConv2d
 from src.SeparateModels import SeparateModels
 from src.SharedModel import SharedModel
-from src.gated_utils import train, set_task, TrainResult, trainLenet, getLenetAccuracy, validateLenet
+from src.gated_utils import train, set_task, TrainResult, trainLenet
 from src.plotting import plot_dataset_loss
 from src.utils import seed
 
 from src.LeNet import LeNet5
-from src.LeNet import transform_grayscale_to_RGB
+from src.LeNet import transform_grayscale_to_RGB, transform_grayscale_to_RGB_inverse
 from torch.utils.data import DataLoader
 
 from time import time
@@ -73,30 +73,41 @@ def run_experiment(
     else:
         writer: SummaryWriter
 
-
-    sizetransforms = transforms.Compose([transforms.Resize((32, 32)), transforms.ToTensor(), transform_grayscale_to_RGB([0, 0, 0])])
-    #download and create datasets
-    train_mnist = datasets.MNIST('~/datasets/mnist', transform=sizetransforms, train=True, download=True)
-    test_mnist = datasets.MNIST('~/datasets/mnist', transform=sizetransforms, train=False, download=True)
-    #define data loaders
-    train_loader = DataLoader(dataset=train_mnist,
-                          batch_size=len(train_mnist),
-                          shuffle=True)
-    test_loader = DataLoader(dataset=test_mnist,
-                              batch_size=len(test_mnist),
+    colors = [[0.5, 0, 0], [0, 0.75, 0], [1, 1, 1]]
+    inverses = [False, False, False]
+    assert(len(inverses) == len(colors))
+    task_train_data = []
+    task_test_data = []
+    task_train_loader = []
+    task_test_loader = []
+    for c in range(len(colors)):
+        if inverses[c]:
+            sizetransforms = transforms.Compose(
+                [transforms.Resize((32, 32)), transforms.ToTensor(), transform_grayscale_to_RGB_inverse(colors[c])])
+        else:
+            sizetransforms = transforms.Compose(
+                [transforms.Resize((32, 32)), transforms.ToTensor(), transform_grayscale_to_RGB(colors[c])])
+        #download and create datasets
+        train_mnist = datasets.MNIST('~/datasets/mnist', transform=sizetransforms, train=True, download=True)
+        test_mnist = datasets.MNIST('~/datasets/mnist', transform=sizetransforms, train=False, download=True)
+        #define data loaders
+        train_loader = DataLoader(dataset=train_mnist,
+                              batch_size=len(train_mnist),
                               shuffle=True)
-
-
-    task_train_data = [train_mnist]
-    task_test_data = [test_mnist]
-    task_train_loader: List[DataLoader] = [train_loader]
-    task_test_loader: List[DataLoader] = [test_loader]
+        test_loader = DataLoader(dataset=test_mnist,
+                                  batch_size=len(test_mnist),
+                                  shuffle=True)
+        task_train_data.append(train_mnist)
+        task_test_data.append(test_mnist)
+        task_train_loader.append(train_loader)
+        task_test_loader.append(test_loader)
 
     def test_fn(model: nn.Module, epoch: int):
         task_idx: int
         criterion = nn.CrossEntropyLoss()
 
         for task_idx, tr_loader in enumerate(task_train_loader):
+            set_task(model, task_idx)
             model.eval()
             running_loss = 0
             correct_pred = 0
@@ -122,6 +133,7 @@ def run_experiment(
                 scalar_value=train_accuracy,
                 global_step=epoch)
         for task_idx, ts_loader in enumerate(task_test_loader):
+            set_task(model, task_idx)
             model.eval()
             running_loss = 0
             correct_pred = 0
@@ -149,7 +161,7 @@ def run_experiment(
 
 
     model_maker_lookup: Dict[str, Callable[[int], nn.Module]] = {
-        'gated': lambda n_tasks: LeNet5(gated=True, n_tasks=1),
+        'gated': lambda n_tasks: LeNet5(gated=True, n_tasks=n_tasks),
         'separate': lambda n_tasks: SeparateModels(lambda: LeNet5(gated=False), n_tasks=n_tasks),
         'shared': lambda n_tasks: SharedModel(LeNet5(gated=False), n_tasks=n_tasks)
     }
@@ -186,15 +198,17 @@ def run_experiment(
 if __name__ == "__main__":
     N_INPUTS: int = 11
     N_OUTPUTS: int = 11
-    N_TASKS: int = 1
+    N_TASKS: int = 3
     SEED: int = 1
     N_SAMPLES: int = 51
     MASK_PROBABILITY: float = 0.75
     LEARNING_RATE: float = 0.001
     TASK_SPEEDUP: float = N_TASKS * 3
     BATCH_SIZE: int = 32
-    N_EPOCHS: int = 500#20001
-    MODEL: str = 'gated'  # (gated, shared, separate)
+    N_EPOCHS: int = 1000#20001
+    MODEL: str = 'shared'  # (gated, shared, separate)
+
+    print(MODEL + " for " + str(N_TASKS) + " tasks")
 
     name: str = input("Enter model name: ")
 
